@@ -1,3 +1,4 @@
+// @ts-nocheck — script de carga de datos, no forma parte del build de Next.js
 import { createClient } from '@supabase/supabase-js';
 import AdmZip from 'adm-zip';
 import csv from 'csv-parser';
