@@ -4,8 +4,9 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, MapPin, Star, Plus } from "lucide-react";
+import { Users, MapPin, Star, Plus, Inbox } from "lucide-react";
 import type { ConsorcioProfile } from "@/types";
+import { SolicitudConsorcioDialog } from "@/components/consorcios/SolicitudConsorcioDialog";
 
 export default async function ConsorciosPage() {
   const supabase = await createClient();
@@ -40,17 +41,25 @@ export default async function ConsorciosPage() {
             Conectate con proveedores para armar consorcios y ganar más licitaciones.
           </p>
         </div>
-        <Link href="/consorcios/mi-perfil">
-          <Button className="bg-purple-600 hover:bg-purple-700 text-white gap-2">
-            {miPerfil ? (
-              "Mi perfil"
-            ) : (
-              <>
-                <Plus className="w-4 h-4" /> Crear mi perfil
-              </>
-            )}
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/consorcios/solicitudes">
+            <Button variant="outline" className="gap-2">
+              <Inbox className="w-4 h-4" />
+              Solicitudes
+            </Button>
+          </Link>
+          <Link href="/consorcios/mi-perfil">
+            <Button className="bg-purple-600 hover:bg-purple-700 text-white gap-2">
+              {miPerfil ? (
+                "Mi perfil"
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" /> Crear mi perfil
+                </>
+              )}
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {!perfiles?.length ? (
@@ -114,9 +123,27 @@ export default async function ConsorciosPage() {
                         </Badge>
                       )}
                       {p.user_id !== user.id && (
-                        <Button variant="outline" size="sm" className="text-xs">
-                          Conectar
-                        </Button>
+                        <>
+                          <Link href={`/consorcios/${p.id}`}>
+                            <Button variant="outline" size="sm" className="text-xs">
+                              Ver perfil
+                            </Button>
+                          </Link>
+                          <SolicitudConsorcioDialog
+                            receptorId={p.user_id}
+                            receptorNombre={
+                              p.user_profiles?.nombre_contacto ?? "este proveedor"
+                            }
+                            triggerLabel="Conectar"
+                          />
+                        </>
+                      )}
+                      {p.user_id === user.id && (
+                        <Link href={`/consorcios/${p.id}`}>
+                          <Button variant="outline" size="sm" className="text-xs">
+                            Ver perfil
+                          </Button>
+                        </Link>
                       )}
                     </div>
                   </div>

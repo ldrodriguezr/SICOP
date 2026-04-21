@@ -126,6 +126,18 @@ CREATE TABLE IF NOT EXISTS consorcio_solicitudes (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- TABLA: consorcio_mensajes
+CREATE TABLE IF NOT EXISTS consorcio_mensajes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  solicitud_id UUID REFERENCES consorcio_solicitudes(id) ON DELETE CASCADE,
+  sender_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  mensaje TEXT NOT NULL,
+  read_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_consorcio_mensajes_solicitud ON consorcio_mensajes(solicitud_id, created_at);
+
 -- TABLA: notificaciones
 CREATE TABLE IF NOT EXISTS notificaciones (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -168,6 +180,7 @@ ALTER TABLE licitaciones_guardadas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alertas_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE consorcio_perfiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE consorcio_solicitudes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE consorcio_mensajes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notificaciones ENABLE ROW LEVEL SECURITY;
 
 -- user_profiles
@@ -209,6 +222,41 @@ CREATE POLICY "Users see own solicitudes" ON consorcio_solicitudes
 
 CREATE POLICY "Users create solicitudes" ON consorcio_solicitudes
   FOR INSERT WITH CHECK (auth.uid() = solicitante_id);
+
+CREATE POLICY "Users update own solicitudes" ON consorcio_solicitudes
+  FOR UPDATE USING (auth.uid() = solicitante_id OR auth.uid() = receptor_id);
+
+-- consorcio_mensajes
+CREATE POLICY "Users see own consorcio messages" ON consorcio_mensajes
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1
+      FROM consorcio_solicitudes cs
+      WHERE cs.id = solicitud_id
+        AND (auth.uid() = cs.solicitante_id OR auth.uid() = cs.receptor_id)
+    )
+  );
+
+CREATE POLICY "Users create own consorcio messages" ON consorcio_mensajes
+  FOR INSERT WITH CHECK (
+    auth.uid() = sender_id
+    AND EXISTS (
+      SELECT 1
+      FROM consorcio_solicitudes cs
+      WHERE cs.id = solicitud_id
+        AND (auth.uid() = cs.solicitante_id OR auth.uid() = cs.receptor_id)
+    )
+  );
+
+CREATE POLICY "Users update read_at own consorcio messages" ON consorcio_mensajes
+  FOR UPDATE USING (
+    EXISTS (
+      SELECT 1
+      FROM consorcio_solicitudes cs
+      WHERE cs.id = solicitud_id
+        AND (auth.uid() = cs.solicitante_id OR auth.uid() = cs.receptor_id)
+    )
+  );
 
 -- notificaciones
 CREATE POLICY "Users see own notifications" ON notificaciones

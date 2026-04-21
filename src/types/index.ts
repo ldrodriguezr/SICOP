@@ -10,6 +10,7 @@ export type LicitacionGuardada = Database["public"]["Tables"]["licitaciones_guar
 export type AlertaConfig = Database["public"]["Tables"]["alertas_config"]["Row"];
 export type ConsorcioProfile = Database["public"]["Tables"]["consorcio_perfiles"]["Row"];
 export type ConsorcioSolicitud = Database["public"]["Tables"]["consorcio_solicitudes"]["Row"];
+export type ConsorcioMensaje = Database["public"]["Tables"]["consorcio_mensajes"]["Row"];
 export type Notificacion = Database["public"]["Tables"]["notificaciones"]["Row"];
 export type HistorialPrecio = Database["public"]["Tables"]["historial_precios"]["Row"];
 

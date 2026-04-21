@@ -239,6 +239,26 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["consorcio_solicitudes"]["Insert"]>;
         Relationships: [];
       };
+      consorcio_mensajes: {
+        Row: {
+          id: string;
+          solicitud_id: string;
+          sender_id: string;
+          mensaje: string;
+          read_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          solicitud_id: string;
+          sender_id: string;
+          mensaje: string;
+          read_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["consorcio_mensajes"]["Insert"]>;
+        Relationships: [];
+      };
       notificaciones: {
         Row: {
           id: string;
