@@ -1,0 +1,34 @@
+name: Sync SICOP Data
+
+on:
+  schedule:
+    # Todos los días a las 12pm UTC (6am Costa Rica UTC-6)
+    - cron: "0 12 * * *"
+  workflow_dispatch:
+    # Permitir ejecución manual desde GitHub Actions
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync licitaciones desde Observatorio
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "${{ secrets.APP_URL }}/api/cron/sync-sicop" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}")
+          echo "sync-sicop HTTP status: $response"
+          if [ "$response" -ne 200 ]; then
+            echo "Error: sync-sicop retornó HTTP $response"
+            exit 1
+          fi
+
+      - name: Enviar alertas a usuarios
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "${{ secrets.APP_URL }}/api/cron/send-alertas" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}")
+          echo "send-alertas HTTP status: $response"
+          if [ "$response" -ne 200 ]; then
+            echo "Error: send-alertas retornó HTTP $response"
+            exit 1
+          fi
