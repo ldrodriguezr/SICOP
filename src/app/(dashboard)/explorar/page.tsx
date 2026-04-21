@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { Search, Filter, ExternalLink, Brain, Bookmark } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -25,9 +25,10 @@ import Link from "next/link";
 import { toast } from "sonner";
 import type { Licitacion } from "@/types";
 
-export default function ExplorarPage() {
+function ExplorarContent() {
   const [licitaciones, setLicitaciones] = useState<Licitacion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [estado, setEstado] = useState("activo");
   const [total, setTotal] = useState(0);
@@ -37,6 +38,7 @@ export default function ExplorarPage() {
   const fetchLicitaciones = useCallback(
     async (resetPage = false) => {
       setLoading(true);
+      setError(null);
       const currentPage = resetPage ? 1 : page;
       if (resetPage) setPage(1);
 
@@ -48,19 +50,31 @@ export default function ExplorarPage() {
           limit: "20",
         });
         const res = await fetch(`/api/licitaciones?${params}`);
+        if (!res.ok) {
+          throw new Error(`Error del servidor: ${res.status}`);
+        }
         const json = await res.json();
 
         if (json.success) {
-          setLicitaciones(resetPage ? json.data : (prev) => [...prev, ...json.data]);
-          setTotal(json.meta.total);
-          setHasMore(json.meta.hasMore);
+          if (resetPage) {
+            setLicitaciones(json.data ?? []);
+          } else {
+            setLicitaciones((prev) => [...prev, ...(json.data ?? [])]);
+          }
+          setTotal(json.meta?.total ?? 0);
+          setHasMore(json.meta?.hasMore ?? false);
+        } else {
+          throw new Error(json.error?.message ?? "Error al cargar datos");
         }
-      } catch {
-        toast.error("Error cargando licitaciones");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Error cargando licitaciones";
+        setError(msg);
+        toast.error(msg);
       } finally {
         setLoading(false);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [q, estado, page]
   );
 
@@ -99,7 +113,11 @@ export default function ExplorarPage() {
           Explorar licitaciones
         </h1>
         <p className="text-gray-500 text-sm mt-1">
-          {total > 0 ? `${total.toLocaleString()} licitaciones encontradas` : "Buscando..."}
+          {loading
+            ? "Cargando..."
+            : total > 0
+            ? `${total.toLocaleString()} licitaciones encontradas`
+            : "Sin resultados"}
         </p>
       </div>
 
@@ -117,26 +135,39 @@ export default function ExplorarPage() {
         <Select value={estado} onValueChange={setEstado}>
           <SelectTrigger className="w-44">
             <Filter className="w-4 h-4 mr-2" />
-            <SelectValue />
+            <SelectValue placeholder="Estado" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="activo">Activas</SelectItem>
             <SelectItem value="adjudicado">Adjudicadas</SelectItem>
             <SelectItem value="desierto">Desiertas</SelectItem>
             <SelectItem value="cancelado">Canceladas</SelectItem>
-            <SelectItem value="">Todas</SelectItem>
+            <SelectItem value="todos">Todas</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
+      {/* Error state */}
+      {error && !loading && (
+        <Card>
+          <CardContent className="py-10 text-center text-red-500">
+            <p className="font-medium">Error al cargar licitaciones</p>
+            <p className="text-sm text-gray-500 mt-1">{error}</p>
+            <Button variant="outline" className="mt-4" onClick={() => fetchLicitaciones(true)}>
+              Reintentar
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Lista */}
-      {loading && licitaciones.length === 0 ? (
+      {!error && loading && licitaciones.length === 0 ? (
         <div className="space-y-3">
           {[1, 2, 3, 4, 5].map((i) => (
             <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />
           ))}
         </div>
-      ) : licitaciones.length === 0 ? (
+      ) : !error && licitaciones.length === 0 && !loading ? (
         <Card>
           <CardContent className="py-16 text-center text-gray-500">
             No se encontraron licitaciones con esos filtros.
@@ -159,7 +190,7 @@ export default function ExplorarPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <Badge
-                          className={`text-xs ${getEstadoBadgeColor(l.estado)}`}
+                          className={`text-xs ${getEstadoBadgeColor(l.estado ?? "")}`}
                         >
                           {l.estado}
                         </Badge>
@@ -168,13 +199,13 @@ export default function ExplorarPage() {
                         )}
                       </div>
                       <p className="font-medium text-gray-900">
-                        {truncate(l.titulo, 100)}
+                        {truncate(l.titulo ?? "", 100)}
                       </p>
                       <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
                         <span>{l.institucion}</span>
-                        {l.monto_estimado && (
+                        {l.monto_estimado != null && (
                           <span className="text-green-700 font-medium">
-                            {formatCurrency(l.monto_estimado, l.moneda)}
+                            {formatCurrency(Number(l.monto_estimado), l.moneda ?? "CRC")}
                           </span>
                         )}
                         {l.fecha_limite_oferta && (
@@ -233,5 +264,21 @@ export default function ExplorarPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ExplorarPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-3">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />
+          ))}
+        </div>
+      }
+    >
+      <ExplorarContent />
+    </Suspense>
   );
 }

@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     if (q) {
       query = query.ilike("titulo", `%${q}%`);
     }
-    if (estado) {
+    if (estado && estado !== "todos") {
       query = query.eq("estado", estado as "activo" | "adjudicado" | "desierto" | "cancelado");
     }
     if (institucion) {
