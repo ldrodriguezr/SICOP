@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Building2, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,12 +11,45 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 
+function getLoginErrorMessage(message: string) {
+  const normalized = message.toLowerCase();
+
+  if (
+    normalized.includes("email not confirmed") ||
+    normalized.includes("signup disabled") ||
+    normalized.includes("not confirmed")
+  ) {
+    return "Todavia no confirmaste el correo. Revisa tu email y spam antes de iniciar sesion.";
+  }
+
+  if (
+    normalized.includes("invalid login credentials") ||
+    normalized.includes("invalid_credentials") ||
+    normalized.includes("invalid credentials")
+  ) {
+    return "Email o contraseña incorrectos. Si acabas de registrarte, confirma primero el correo.";
+  }
+
+  return message;
+}
+
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get("registered") === "1") {
+      toast.info("Confirma tu email para continuar", {
+        description:
+          "Te enviamos un correo de verificacion. Hasta hacer clic en el enlace no podras entrar con email y contraseña.",
+        duration: 10000,
+      });
+    }
+  }, [searchParams]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -26,7 +59,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      toast.error("Credenciales incorrectas. Verificá tu email y contraseña.");
+      toast.error(getLoginErrorMessage(error.message));
       setLoading(false);
       return;
     }
@@ -62,7 +95,8 @@ export default function LoginPage() {
           <CardHeader>
             <CardTitle>Iniciar sesión</CardTitle>
             <CardDescription>
-              Ingresá a tu cuenta para continuar
+              Ingresá a tu cuenta para continuar. Si acabás de registrarte,
+              confirmá primero el correo.
             </CardDescription>
           </CardHeader>
           <CardContent>

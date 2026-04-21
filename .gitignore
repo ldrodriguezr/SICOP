@@ -25,6 +25,7 @@ yarn-error.log*
 # Local env files — NUNCA commitear
 .env
 .env.local
+.env.vercel
 .env.development.local
 .env.test.local
 .env.production.local
@@ -39,3 +40,5 @@ next-env.d.ts
 # Supabase local
 supabase/.branches
 supabase/.temp
+temp_*.zip
+temp_extract_*/

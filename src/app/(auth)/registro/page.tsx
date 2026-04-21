@@ -64,7 +64,18 @@ export default function RegistroPage() {
       }
     }
 
-    toast.success("¡Registro exitoso! Revisá tu email para confirmar tu cuenta.");
+    if (!data.session) {
+      toast.success("Te enviamos un email de confirmación", {
+        description:
+          "Revisá tu bandeja de entrada o spam y hacé clic en el enlace antes de iniciar sesión.",
+        duration: 10000,
+      });
+      setLoading(false);
+      router.push("/login?registered=1");
+      return;
+    }
+
+    toast.success("¡Cuenta creada! Ya podés usar SICOP Copilot.");
     router.push("/dashboard");
   }
 
@@ -84,7 +95,8 @@ export default function RegistroPage() {
           <CardHeader>
             <CardTitle>Crear cuenta</CardTitle>
             <CardDescription>
-              Empezá gratis. Sin tarjeta de crédito.
+              Empezá gratis. Sin tarjeta de crédito. Te enviaremos un email para
+              confirmar la cuenta antes del primer ingreso.
             </CardDescription>
           </CardHeader>
           <CardContent>
