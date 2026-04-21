@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "data:load": "tsx scripts/load-historical-data.ts"
+    "data:load": "tsx scripts/load-historical-data.ts",
+    "data:status": "tsx scripts/update-estados.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
