@@ -20,6 +20,14 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// === GLOBAL REPORT COUNTERS ===
+const report = {
+  months_ok: [] as string[],
+  months_failed: [] as string[],
+  total_licitaciones: 0,
+  total_historial: 0,
+};
+
 /**
  * Downloads a file from a URL to a local destination
  */
@@ -45,16 +53,58 @@ const downloadFile = (url: string, dest: string): Promise<void> => {
 };
 
 /**
- * Upserts a batch of records into a Supabase table
+ * Upserts a batch of records into a Supabase table. Returns count inserted.
  */
-async function upsertBatch(table: string, records: any[]) {
-  if (records.length === 0) return;
-  const { error } = await supabase.from(table).upsert(records, { onConflict: table === 'licitaciones' ? 'numero_procedimiento' : undefined });
+async function upsertBatch(table: string, records: any[]): Promise<number> {
+  if (records.length === 0) return 0;
+  const { error } = await supabase
+    .from(table)
+    .upsert(records, {
+      onConflict: table === 'licitaciones' ? 'numero_procedimiento' : undefined,
+    });
   if (error) {
-    console.error(`Error upserting to ${table}:`, error.message);
-  } else {
-    console.log(`Successfully upserted ${records.length} records to ${table}`);
+    console.error(`  [ERROR] upserting to ${table}: ${error.message}`);
+    return 0;
   }
+  return records.length;
+}
+
+/**
+ * Reads a CSV file and processes it in batches using a row transformer function.
+ */
+async function processCsv(
+  filePath: string,
+  table: string,
+  transformer: (row: any) => any
+): Promise<number> {
+  let totalInserted = 0;
+  let batch: any[] = [];
+
+  return new Promise((resolve, reject) => {
+    fs.createReadStream(filePath)
+      .pipe(csv({ separator: ';' }))
+        .on('data', async (row) => {
+          const record = transformer(row);
+          if (record) {
+            for (let key in record) {
+              if (typeof record[key] === 'string') record[key] = record[key].replace(/^"|"$/g, '');
+            }
+            batch.push(record);
+          }
+          if (batch.length >= 500) {
+            const current = [...batch];
+            batch = [];
+            totalInserted += await upsertBatch(table, current);
+          }
+        })
+        .on('end', async () => {
+        if (batch.length > 0) {
+          totalInserted += await upsertBatch(table, batch);
+        }
+        resolve(totalInserted);
+      })
+      .on('error', reject);
+  });
 }
 
 /**
@@ -70,114 +120,120 @@ const processMonth = async (year: number, month: number) => {
   console.log(`PROCESSING: ${yyyymm}`);
   console.log(`=========================================`);
 
+  let licitacionesCount = 0;
+  let historialCount = 0;
+
   try {
+    // Download if not cached
     if (!fs.existsSync(zipPath)) {
-      console.log(`=> Downloading ${url}...`);
+      console.log(`=> Downloading...`);
       await downloadFile(url, zipPath);
+    } else {
+      console.log(`=> Using cached ZIP.`);
     }
 
     console.log(`=> Extracting...`);
     const zip = new AdmZip(zipPath);
     zip.extractAllTo(extractPath, true);
 
-    const baseDir = path.join(extractPath, yyyymm);
-    if (!fs.existsSync(baseDir)) {
-      throw new Error(`Data folder ${yyyymm} not found in zip`);
-    }
+    // Dynamic folder detection (SICOP sometimes uses yyyymm, sometimes something else)
+    const entries = fs.readdirSync(extractPath, { withFileTypes: true });
+    const dirEntry = entries.find(e => e.isDirectory());
+    
+    // If a directory is found, use it. Otherwise, use the extract path itself (root)
+    const baseDir = dirEntry ? path.join(extractPath, dirEntry.name) : extractPath;
+    console.log(`=> Using base directory: ${baseDir}`);
 
-    // 1. Process DetalleCarteles.csv for Tenders
+    // 1. DetalleCarteles.csv -> licitaciones
     const cartelesFile = path.join(baseDir, 'DetalleCarteles.csv');
     if (fs.existsSync(cartelesFile)) {
-      console.log(`=> Processing Tenders (DetalleCarteles.csv)...`);
-      const tenders: any[] = [];
-      await new Promise((resolve, reject) => {
-        fs.createReadStream(cartelesFile)
-          .pipe(csv({ separator: ';' }))
-          .on('data', (row) => {
-            tenders.push({
-              numero_procedimiento: row.NRO_SICOP,
-              tipo: row.TIPO_PROCEDIMIENTO,
-              titulo: row.CARTEL_NM || 'Sin título',
-              institucion: row.CEDULA_INSTITUCION || 'Desconocida',
-              fecha_publicacion: row.FECHA_PUBLICACION ? new Date(row.FECHA_PUBLICACION).toISOString() : null,
-              fecha_limite_oferta: row.FECHAH_APERTURA ? new Date(row.FECHAH_APERTURA).toISOString() : null,
-              monto_estimado: parseFloat(row.MONTO_EST) || 0,
-              estado: 'activo',
-              raw_data: row
-            });
-            if (tenders.length >= 200) {
-              const batch = [...tenders];
-              tenders.length = 0;
-              upsertBatch('licitaciones', batch);
-            }
-          })
-          .on('end', async () => {
-            await upsertBatch('licitaciones', tenders);
-            resolve(true);
-          })
-          .on('error', reject);
-      });
+      console.log(`=> Processing DetalleCarteles.csv -> licitaciones...`);
+      licitacionesCount = await processCsv(cartelesFile, 'licitaciones', (row) => ({
+        numero_procedimiento: row.NRO_SICOP,
+        tipo: row.TIPO_PROCEDIMIENTO,
+        titulo: row.CARTEL_NM || 'Sin título',
+        institucion: row.CEDULA_INSTITUCION || 'Desconocida',
+        fecha_publicacion: row.FECHA_PUBLICACION ? new Date(row.FECHA_PUBLICACION).toISOString() : null,
+        fecha_limite_oferta: row.FECHAH_APERTURA ? new Date(row.FECHAH_APERTURA).toISOString() : null,
+        monto_estimado: parseFloat(row.MONTO_EST) || 0,
+        moneda: 'CRC',
+        estado: 'activo',
+        raw_data: row,
+      }));
+      console.log(`   => licitaciones: ${licitacionesCount} rows upserted`);
     }
 
-    // 2. Process OrdenPedido.csv for Price History
+    // 2. OrdenPedido.csv -> historial_precios
     const ordersFile = path.join(baseDir, 'OrdenPedido.csv');
     if (fs.existsSync(ordersFile)) {
-      console.log(`=> Processing Price History (OrdenPedido.csv)...`);
-      const history: any[] = [];
-      await new Promise((resolve, reject) => {
-        fs.createReadStream(ordersFile)
-          .pipe(csv({ separator: ';' }))
-          .on('data', (row) => {
-            // Note: We'd ideally join with DetalleLineaCartel for CABIE coding, 
-            // but for MVP we use the description available in the order or procurement title
-            history.push({
-              codigo_cabie: row.NUMERO_PROCEDIMIENTO, // Placeholder or mapping if available
-              descripcion_bien: row.DESC_PROCEDIMIENTO,
-              institucion: row.NRO_SICOP, // Often contains institution info or we link via proc ID
-              monto_adjudicado: parseFloat(row.TOTAL_ORDEN) || 0,
-              fecha_adjudicacion: row.FECHA_PROVEEDOR_RECIBE_ORDEN ? new Date(row.FECHA_PROVEEDOR_RECIBE_ORDEN).toISOString() : null,
-              proveedor_nombre: row.NOMBRE_PROVEEDOR,
-              año: year
-            });
-            if (history.length >= 200) {
-              const batch = [...history];
-              history.length = 0;
-              upsertBatch('historial_precios', batch);
-            }
-          })
-          .on('end', async () => {
-            await upsertBatch('historial_precios', history);
-            resolve(true);
-          })
-          .on('error', reject);
-      });
+      console.log(`=> Processing OrdenPedido.csv -> historial_precios...`);
+      historialCount = await processCsv(ordersFile, 'historial_precios', (row) => ({
+        codigo_cabie: row.NUMERO_PROCEDIMIENTO || null,
+        descripcion_bien: row.DESC_PROCEDIMIENTO || null,
+        institucion: row.NRO_SICOP || null,
+        monto_adjudicado: parseFloat(row.TOTAL_ORDEN) || 0,
+        fecha_adjudicacion: row.FECHA_PROVEEDOR_RECIBE_ORDEN
+          ? new Date(row.FECHA_PROVEEDOR_RECIBE_ORDEN).toISOString()
+          : null,
+        proveedor_nombre: row.NOMBRE_PROVEEDOR || null,
+        precio_unitario: parseFloat(row.USD_MONT) || null,
+        año: year,
+      }));
+      console.log(`   => historial_precios: ${historialCount} rows upserted`);
     }
 
-    console.log(`=> Finished ${yyyymm}`);
-  } catch (error) {
-    console.error(`FAILED ${yyyymm}:`, error);
+    // Update global counters
+    report.total_licitaciones += licitacionesCount;
+    report.total_historial += historialCount;
+    report.months_ok.push(yyyymm);
+    console.log(`=> DONE ${yyyymm} ✓`);
+  } catch (error: any) {
+    console.error(`FAILED ${yyyymm}: ${error.message}`);
+    report.months_failed.push(`${yyyymm} (${error.message})`);
   } finally {
-    // Optional: Keep zip to avoid re-downloading if script restarts, but clean extracted folder
-    if (fs.existsSync(extractPath)) fs.rmSync(extractPath, { recursive: true, force: true });
+    // Clean extracted folder, keep zip cache for potential re-runs
+    if (fs.existsSync(extractPath)) {
+      fs.rmSync(extractPath, { recursive: true, force: true });
+    }
   }
 };
+
+async function printDbTotals() {
+  const { count: lic } = await supabase.from('licitaciones').select('*', { count: 'exact', head: true });
+  const { count: hist } = await supabase.from('historial_precios').select('*', { count: 'exact', head: true });
+  console.log(`\n  DB Total licitaciones:    ${lic?.toLocaleString()} rows`);
+  console.log(`  DB Total historial_precios: ${hist?.toLocaleString()} rows`);
+}
 
 async function main() {
   const args = process.argv.slice(2);
   const startYear = parseInt(args[0]) || 2024;
   const startMonth = parseInt(args[1]) || 1;
   const endYear = parseInt(args[2]) || 2024;
-  const endMonth = parseInt(args[3]) || 1;
+  const endMonth = parseInt(args[3]) || 12;
+
+  console.log(`\nSTARTING SICOP DATA LOAD: ${startYear}-${String(startMonth).padStart(2,'0')} → ${endYear}-${String(endMonth).padStart(2,'0')}`);
 
   for (let y = startYear; y <= endYear; y++) {
-    const mStart = (y === startYear) ? startMonth : 1;
-    const mEnd = (y === endYear) ? endMonth : 12;
+    const mStart = y === startYear ? startMonth : 1;
+    const mEnd = y === endYear ? endMonth : 12;
     for (let m = mStart; m <= mEnd; m++) {
       await processMonth(y, m);
     }
   }
-  
-  console.log('\n--- ALL DATA PROCESSING COMPLETED ---');
+
+  // === FINAL REPORT ===
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`FINAL REPORT`);
+  console.log(`${'='.repeat(50)}`);
+  console.log(`Months OK    : [${report.months_ok.join(', ')}]`);
+  console.log(`Months FAILED: ${report.months_failed.length > 0 ? report.months_failed.join(', ') : 'None ✓'}`);
+  console.log(`\nRows inserted this run:`);
+  console.log(`  licitaciones:    ${report.total_licitaciones.toLocaleString()}`);
+  console.log(`  historial_precios: ${report.total_historial.toLocaleString()}`);
+  console.log(`\nCurrent DB totals:`);
+  await printDbTotals();
+  console.log(`${'='.repeat(50)}\n`);
 }
 
 main().catch(console.error);
