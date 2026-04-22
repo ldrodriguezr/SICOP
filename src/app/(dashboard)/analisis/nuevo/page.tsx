@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Brain, ArrowLeft, Building2, ExternalLink } from "lucide-react";
+import { Brain, ArrowLeft, Building2, ExternalLink, Download, Upload as UploadIcon, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency, getEstadoBadgeColor } from "@/lib/utils";
@@ -154,27 +154,71 @@ function NuevoAnalisisContent() {
       )}
 
       {!resultado ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              {licitacion
-                ? "Proporcioná el cartel de esta licitación"
-                : "¿Cómo querés ingresar el cartel?"}
-            </CardTitle>
-            <CardDescription>
-              {licitacion
-                ? "El cartel es el documento oficial PDF con los requisitos. Podés descargarlo desde SICOP y subirlo, o pegar su URL directa."
-                : "Subí el PDF, pegá la URL del cartel de SICOP, o copiá el texto directamente."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <UploadCartel
-              onSubmit={handleSubmit}
-              isLoading={isLoading}
-              defaultUrl={licitacion?.url_sicop ?? undefined}
-            />
-          </CardContent>
-        </Card>
+        <div className="space-y-4">
+          {/* Pasos guiados cuando hay licitación con URL */}
+          {licitacion?.url_sicop && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm font-semibold text-amber-900 mb-3">
+                ¿Cómo analizar esta licitación? Seguí estos 3 pasos:
+              </p>
+              <ol className="space-y-2">
+                <li className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-200 text-amber-800 text-xs font-bold flex items-center justify-center">1</span>
+                  <div className="flex-1">
+                    <p className="text-sm text-amber-800">
+                      Abrí la licitación en SICOP y descargá el PDF del cartel (sección "Documentos del proceso").
+                    </p>
+                    <a
+                      href={licitacion.url_sicop}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 mt-1 text-xs font-medium text-amber-700 underline underline-offset-2 hover:text-amber-900"
+                    >
+                      <Download className="w-3 h-3" />
+                      Abrir licitación en SICOP
+                    </a>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-200 text-amber-800 text-xs font-bold flex items-center justify-center">2</span>
+                  <p className="text-sm text-amber-800">
+                    Volvé acá y subí el PDF descargado en el formulario de abajo.
+                  </p>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-200 text-amber-800 text-xs font-bold flex items-center justify-center">3</span>
+                  <p className="text-sm text-amber-800">
+                    Claude lee el cartel completo y te dice si calificás, qué requisitos cumplís y tu puntaje de viabilidad.
+                  </p>
+                </li>
+              </ol>
+            </div>
+          )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                {licitacion ? (
+                  <><UploadIcon className="w-4 h-4 text-blue-600" /> Subí el cartel de esta licitación</>
+                ) : (
+                  <><Brain className="w-4 h-4 text-blue-600" /> ¿Cómo querés ingresar el cartel?</>
+                )}
+              </CardTitle>
+              {!licitacion && (
+                <CardDescription>
+                  Subí el PDF, pegá la URL del cartel de SICOP, o copiá el texto directamente.
+                </CardDescription>
+              )}
+            </CardHeader>
+            <CardContent>
+              <UploadCartel
+                onSubmit={handleSubmit}
+                isLoading={isLoading}
+                defaultUrl={licitacion?.url_sicop ?? undefined}
+              />
+            </CardContent>
+          </Card>
+        </div>
       ) : (
         <>
           <div className="flex items-center justify-between">
