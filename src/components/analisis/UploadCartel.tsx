@@ -15,13 +15,14 @@ interface UploadCartelProps {
     contenido: string;
   }) => void;
   isLoading?: boolean;
+  defaultUrl?: string;
 }
 
 const MAX_SIZE_MB = 10;
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
 
-export function UploadCartel({ onSubmit, isLoading }: UploadCartelProps) {
-  const [url, setUrl] = useState("");
+export function UploadCartel({ onSubmit, isLoading, defaultUrl }: UploadCartelProps) {
+  const [url, setUrl] = useState(defaultUrl ?? "");
   const [texto, setTexto] = useState("");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfError, setPdfError] = useState("");
@@ -60,7 +61,7 @@ export function UploadCartel({ onSubmit, isLoading }: UploadCartelProps) {
 
   return (
     <div className="space-y-4">
-      <Tabs defaultValue="pdf">
+      <Tabs defaultValue={defaultUrl ? "url" : "pdf"}>
         <TabsList className="grid grid-cols-3 w-full">
           <TabsTrigger value="pdf" className="gap-2">
             <Upload className="w-4 h-4" /> Subir PDF
